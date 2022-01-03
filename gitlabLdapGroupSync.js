@@ -4,6 +4,7 @@ var ActiveDirectory = require('activedirectory');
 var NodeGitlab = require('node-gitlab');
 
 var ACCESS_LEVEL_OWNER = 50;
+var ACCESS_LEVEL_MAINTAINER = 40;
 var ACCESS_LEVEL_NORMAL = 30;
 
 module.exports = GitlabLdapGroupSync;
@@ -67,6 +68,7 @@ GitlabLdapGroupSync.prototype.sync = function () {
     while(pagedGroups.length == 100);
 
     var membersOwner = yield this.resolveLdapGroupMembers(ldap, this.config['ownersGroup'] || 'admins', gitlabUserMap);
+	var membersMaintainer = yield this.resolveLdapGroupMembers(ldap, this.config['maintainersGroup'] || 'maintainers', gitlabUserMap);
     var membersDefault = yield this.resolveLdapGroupMembers(ldap, 'default', gitlabUserMap);
 
     for (var gitlabGroup of gitlabGroups) {
@@ -88,7 +90,7 @@ GitlabLdapGroupSync.prototype.sync = function () {
           continue; //ignore local users
         }
 
-        var access_level = this.accessLevel(member.id, membersOwner);
+        var access_level = this.accessLevel(member.id, membersOwner, membersMaintainer);
         if (member.access_level !== access_level) {
           console.log('update group member permission', { id: gitlabGroup.id, user_id: member.id, access_level: access_level });
           gitlab.groupMembers.update({ id: gitlabGroup.id, user_id: member.id, access_level: access_level });
@@ -110,7 +112,7 @@ GitlabLdapGroupSync.prototype.sync = function () {
       //add new users
       var toAddIds = members.filter(x => currentMemberIds.indexOf(x) == -1);
       for (var id of toAddIds) {
-        var access_level = this.accessLevel(id, membersOwner);
+        var access_level = this.accessLevel(id, membersOwner, membersMaintainer);
         console.log('add group member', { id: gitlabGroup.id, user_id: id, access_level: access_level });
         gitlab.groupMembers.create({ id: gitlabGroup.id, user_id: id, access_level: access_level });
       }
@@ -127,12 +129,15 @@ GitlabLdapGroupSync.prototype.sync = function () {
 
 var ins = undefined;
 
-GitlabLdapGroupSync.prototype.accessLevel = function (id, membersOwner) {
+GitlabLdapGroupSync.prototype.accessLevel = function (id, membersOwner, membersMaintainer) {
     var owner = membersOwner.indexOf(id) > -1
+	var maintainer = membersMaintainer.indexOf(id) > -1
 
     if(owner) {
         return this.config['ownerAccessLevel'] || ACCESS_LEVEL_OWNER;
-    }
+    } else if (maintainer) {
+		return this.config['maintainerAccessLevel'] || ACCESS_LEVEL_MAINTAINER;
+	}
     return this.config['defaultAccessLevel'] || ACCESS_LEVEL_NORMAL;
 }
 
@@ -149,7 +154,7 @@ GitlabLdapGroupSync.prototype.stopScheduler = function () {
 }
 
 GitlabLdapGroupSync.prototype.resolveLdapGroupMembers = function(ldap, group, gitlabUserMap) {
-  var groupName = (this.config.groupPrefix || 'gitlab-') + group
+  var groupName = (this.config['groupPrefix']) + group
   console.log('Loading users for group: ' + groupName)
   return new Promise(function (resolve, reject) {
     var ldapGroups = {};

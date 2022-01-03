@@ -12,8 +12,10 @@
     "password": "mY_S3Cr3T_P455W0Rd"
   },
   "groupPrefix": "gitlab-",
-  "ownersGroups": "admins",
+  "ownersGroup": "admins",
+  "maintainersGroup" : "maintainers",
   "ownerAccessLevel": 50,
+  "maintainerAccessLevel": 40,
   "defaultAccessLevel": 30
 
 }
