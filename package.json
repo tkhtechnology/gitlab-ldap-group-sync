@@ -12,7 +12,7 @@
     "docker": "docker build -t gitlab-tools/gitlab-ldap-group-sync ."
   },
   "dependencies": {
-    "activedirectory": "^0.7.2",
+    "activedirectory": "https://github.com/tkhtechnology/node-activedirectory.git#use_displayName_instead_cn",
     "body-parser": "^1.17.1",
     "co": "^4.6.0",
     "express": "^4.13.3",
