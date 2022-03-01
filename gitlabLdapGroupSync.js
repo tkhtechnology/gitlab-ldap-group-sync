@@ -66,10 +66,7 @@ GitlabLdapGroupSync.prototype.sync = function () {
 
     }
     while(pagedGroups.length == 100);
-
-    var membersOwner = yield this.resolveLdapGroupMembers(ldap, this.config['ownersGroup'] || 'admins', gitlabUserMap);
-	var membersMaintainer = yield this.resolveLdapGroupMembers(ldap, this.config['maintainersGroup'] || 'maintainers', gitlabUserMap);
-    var membersDefault = yield this.resolveLdapGroupMembers(ldap, 'default', gitlabUserMap);
+    const memberGroups = yield this.resolveLdapGroupMembers(ldap, this.config['group'] || 'GITLAB_USERS', gitlabUserMap);
 
     for (var gitlabGroup of gitlabGroups) {
       console.log('-------------------------');
@@ -90,7 +87,7 @@ GitlabLdapGroupSync.prototype.sync = function () {
           continue; //ignore local users
         }
 
-        var access_level = this.accessLevel(member.id, membersOwner, membersMaintainer);
+        var access_level = this.accessLevel(member.id, memberGroups, gitlabGroup.name);
         if (member.access_level !== access_level) {
           console.log('update group member permission', { id: gitlabGroup.id, user_id: member.id, access_level: access_level });
           gitlab.groupMembers.update({ id: gitlabGroup.id, user_id: member.id, access_level: access_level });
@@ -129,15 +126,16 @@ GitlabLdapGroupSync.prototype.sync = function () {
 
 var ins = undefined;
 
-GitlabLdapGroupSync.prototype.accessLevel = function (id, membersOwner, membersMaintainer) {
-    var owner = membersOwner.indexOf(id) > -1
-	var maintainer = membersMaintainer.indexOf(id) > -1
+GitlabLdapGroupSync.prototype.accessLevel = function (id, memberGroups, groupName) {
+  const roles = memberGroups[id.toString()]
+  if (roles !== undefined) {
+    if(roles.gitlab_owner.includes(groupName)) {
+      return this.config['ownerAccessLevel'] || ACCESS_LEVEL_OWNER;
+    } else if (roles.gitlab_maintainer.includes(groupName)) {
+      return this.config['maintainerAccessLevel'] || ACCESS_LEVEL_MAINTAINER;
+    }
+  }
 
-    if(owner) {
-        return this.config['ownerAccessLevel'] || ACCESS_LEVEL_OWNER;
-    } else if (maintainer) {
-		return this.config['maintainerAccessLevel'] || ACCESS_LEVEL_MAINTAINER;
-	}
     return this.config['defaultAccessLevel'] || ACCESS_LEVEL_NORMAL;
 }
 
@@ -164,15 +162,25 @@ GitlabLdapGroupSync.prototype.resolveLdapGroupMembers = function(ldap, group, gi
         return;
       }
 
-      groupMembers = [];
+      const groupMembers = {};
       if(users) {
         for (var user of users) {
           if (gitlabUserMap[user.sAMAccountName.toLowerCase()]) {
-            groupMembers.push(gitlabUserMap[user.sAMAccountName.toLowerCase()]);
+            let roles = {
+              gitlab_owner: [],
+              gitlab_maintainer: []
+            };
+
+            try {
+              roles = JSON.parse(user.streetAddress)
+              groupMembers[gitlabUserMap[user.sAMAccountName.toLowerCase()]] = roles;
+            } catch(error) {
+              console.error('Error during parsing groups', user.streetAddress)
+            }
           }
         }
       }
-      console.log('Members=' + groupMembers);
+      console.log('Members=' + JSON.stringify(groupMembers));
       resolve(groupMembers);
     });
   });

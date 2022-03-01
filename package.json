@@ -4,6 +4,7 @@
   "private": true,
   "main": "app.js",
   "scripts": {
+    "start:dev": "NODE_TLS_REJECT_UNAUTHORIZED='0' npm run start",
     "start": "node ./bin/www",
     "test": "mocha --recursive test",
     "test:coverage": "nyc npm test",
