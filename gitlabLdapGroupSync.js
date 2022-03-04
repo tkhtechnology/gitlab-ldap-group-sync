@@ -27,14 +27,11 @@ function GitlabLdapGroupSync(config) {
   ldap = new ActiveDirectory(ldapConfig);
   this.config = config
 }
-GitlabLdapGroupSync.prototype.getGroupMembers = function (groupName, memberGroups ) {
+GitlabLdapGroupSync.prototype.getGroupMembers = function (memberGroups) {
   const result = []
   Object.keys(memberGroups)
     .forEach((item) => {
-      if(memberGroups[item].gitlab_maintainer.includes(groupName)
-        || memberGroups[item].gitlab_owner.includes(groupName) ) {
         result.push(Number.parseInt(item));
-      }
     })
   return result;
 }
@@ -113,7 +110,8 @@ GitlabLdapGroupSync.prototype.sync = function () {
         currentMemberIds.push(member.id);
       }
 
-      let members = this.getGroupMembers(gitlabGroup.name, memberGroups);
+      let ldapGroupMembers = yield this.resolveLdapGroupMembers(ldap, gitlabGroup.name, gitlabUserMap);
+      let members = this.getGroupMembers(ldapGroupMembers);
       members = (members && members.length) ? members : membersDefault;
 
       //remove unlisted users
