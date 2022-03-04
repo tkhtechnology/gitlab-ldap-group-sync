@@ -16,9 +16,15 @@ var ldap = undefined;
 function GitlabLdapGroupSync(config) {
   if (!(this instanceof GitlabLdapGroupSync))
     return new GitlabLdapGroupSync(config)
-
+  const ldapConfig = {
+    ...config.ldap,
+    "attributes": {
+      "user": [ "streetAddress", "distinguishedName", "userPrincipalName", "sAMAccountName", "mail", "lockoutTime",
+        "whenCreated", "pwdLastSet", "userAccountControl", "employeeID", "sn", "givenName", "initials", "cn",
+        "displayName", "comment", "description"]
+    }}
   gitlab = NodeGitlab.createThunk(config.gitlab);
-  ldap = new ActiveDirectory(config.ldap);
+  ldap = new ActiveDirectory(ldapConfig);
   this.config = config
 }
 GitlabLdapGroupSync.prototype.getGroupMembers = function (groupName, memberGroups ) {
@@ -27,7 +33,7 @@ GitlabLdapGroupSync.prototype.getGroupMembers = function (groupName, memberGroup
     .forEach((item) => {
       if(memberGroups[item].gitlab_maintainer.includes(groupName)
         || memberGroups[item].gitlab_owner.includes(groupName) ) {
-        result.push(Number.parse(item));
+        result.push(Number.parseInt(item));
       }
     })
   return result;
@@ -51,8 +57,7 @@ GitlabLdapGroupSync.prototype.sync = function () {
       pagedUsers = yield gitlab.users.list({ per_page: 100, page: i });
       gitlabUsers.push.apply(gitlabUsers, pagedUsers);
 
-    }
-    while(pagedUsers.length == 100);
+    } while(pagedUsers.length == 100);
 
     var gitlabUserMap = {};
     var gitlabLocalUserIds = [];
@@ -80,7 +85,6 @@ GitlabLdapGroupSync.prototype.sync = function () {
     const memberGroups = yield this.resolveLdapGroupMembersPermissions(ldap, this.config['group'] || 'GITLAB_USERS', gitlabUserMap);
     const membersMaintainer = yield this.resolveLdapGroupMembers(ldap, this.config['maintainersGroup'] || 'maintainers', gitlabUserMap);
     const membersOwner = yield this.resolveLdapGroupMembers(ldap, this.config['ownersGroup'] || 'admins', gitlabUserMap);
-
     for (var gitlabGroup of gitlabGroups) {
       console.log('-------------------------');
       console.log('group:', gitlabGroup.name);
