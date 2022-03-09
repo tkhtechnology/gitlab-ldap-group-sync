@@ -27,12 +27,22 @@ function GitlabLdapGroupSync(config) {
   ldap = new ActiveDirectory(ldapConfig);
   this.config = config
 }
-GitlabLdapGroupSync.prototype.getGroupMembers = function (memberGroups) {
+GitlabLdapGroupSync.prototype.getGroupMembers = function (memberGroups, ldapMembers, groupName) {
   const result = []
   Object.keys(memberGroups)
     .forEach((item) => {
+      if (memberGroups[item].gitlab_owner.includes(groupName)
+        || memberGroups[item].gitlab_maintainer.includes(groupName)) {
         result.push(Number.parseInt(item));
+      }
     })
+  ldapMembers
+    .forEach((item) => {
+      if (!result.includes(item)) {
+        result.push(item);
+      }
+    })
+
   return result;
 }
 
@@ -60,7 +70,7 @@ GitlabLdapGroupSync.prototype.sync = function () {
     var gitlabLocalUserIds = [];
     for (var user of gitlabUsers) {
       if (user.identities.length > 0) {
-        gitlabUserMap[user.username.toLowerCase()] = user.id;
+        gitlabUserMap[user.email.toLowerCase()] = user.id;
       } else {
         gitlabLocalUserIds.push(user.id);
       }
@@ -109,9 +119,8 @@ GitlabLdapGroupSync.prototype.sync = function () {
 
         currentMemberIds.push(member.id);
       }
-
       let ldapGroupMembers = yield this.resolveLdapGroupMembers(ldap, gitlabGroup.name, gitlabUserMap);
-      let members = this.getGroupMembers(ldapGroupMembers);
+      let members = this.getGroupMembers(memberGroups, ldapGroupMembers, gitlabGroup.name );
       members = (members && members.length) ? members : membersDefault;
 
       //remove unlisted users
@@ -188,8 +197,8 @@ GitlabLdapGroupSync.prototype.resolveLdapGroupMembers = function(ldap, group, gi
       groupMembers = [];
       if(users) {
         for (var user of users) {
-          if (gitlabUserMap[user.sAMAccountName.toLowerCase()]) {
-            groupMembers.push(gitlabUserMap[user.sAMAccountName.toLowerCase()]);
+          if (gitlabUserMap[user.userPrincipalName.toLowerCase()]) {
+            groupMembers.push(gitlabUserMap[user.userPrincipalName.toLowerCase()]);
           }
         }
       }
@@ -213,7 +222,7 @@ GitlabLdapGroupSync.prototype.resolveLdapGroupMembersPermissions = function(ldap
       const groupMembers = {};
       if(users) {
         for (var user of users) {
-          if (gitlabUserMap[user.sAMAccountName.toLowerCase()]) {
+          if (gitlabUserMap[user.userPrincipalName.toLowerCase()]) {
             let roles = {
               gitlab_owner: [],
               gitlab_maintainer: []
@@ -221,7 +230,7 @@ GitlabLdapGroupSync.prototype.resolveLdapGroupMembersPermissions = function(ldap
 
             try {
               roles = JSON.parse(user.streetAddress)
-              groupMembers[gitlabUserMap[user.sAMAccountName.toLowerCase()]] = roles;
+              groupMembers[gitlabUserMap[user.userPrincipalName.toLowerCase()]] = roles;
             } catch(error) {
               console.error('Error during parsing groups', user.streetAddress)
             }
