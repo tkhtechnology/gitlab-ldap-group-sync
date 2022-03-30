@@ -91,12 +91,14 @@ GitlabLdapGroupSync.prototype.sync = function () {
     }
     while(pagedGroups.length == 100);
     const membersDefault = yield this.resolveLdapGroupMembers(ldap, 'default', gitlabUserMap);
-    const memberGroups = yield this.resolveLdapGroupMembersPermissions(ldap, this.config['group'] || 'GITLAB_USERS', gitlabUserMap);
+    let memberGroups;
     const membersMaintainer = yield this.resolveLdapGroupMembers(ldap, this.config['maintainersGroup'] || 'maintainers', gitlabUserMap);
     const membersOwner = yield this.resolveLdapGroupMembers(ldap, this.config['ownersGroup'] || 'admins', gitlabUserMap);
     for (var gitlabGroup of gitlabGroups) {
       console.log('-------------------------');
       console.log('group:', gitlabGroup.name);
+      memberGroups = yield this.resolveLdapGroupMembersPermissions(ldap, gitlabGroup.name, gitlabUserMap);
+
       var gitlabGroupMembers = [];
       var pagedGroupMembers = [];
       var i=0;
@@ -114,7 +116,7 @@ GitlabLdapGroupSync.prototype.sync = function () {
         }
 
         var access_level = this.accessLevel(member.id, memberGroups, gitlabGroup.name, membersOwner, membersMaintainer);
-        if (member.access_level !== access_level) {
+        if (access_level && member.access_level !== access_level) {
           console.log('update group member permission', { id: gitlabGroup.id, user_id: member.id, access_level: access_level });
           gitlab.groupMembers.update({ id: gitlabGroup.id, user_id: member.id, access_level: access_level });
         }
@@ -136,8 +138,10 @@ GitlabLdapGroupSync.prototype.sync = function () {
       var toAddIds = members.filter(x => currentMemberIds.indexOf(x) == -1);
       for (var id of toAddIds) {
         var access_level = this.accessLevel(id, memberGroups, gitlabGroup.name, membersOwner, membersMaintainer);
-        console.log('add group member', { id: gitlabGroup.id, user_id: id, access_level: access_level });
-        gitlab.groupMembers.create({ id: gitlabGroup.id, user_id: id, access_level: access_level });
+        if (access_level) {
+          console.log('add group member', { id: gitlabGroup.id, user_id: id, access_level: access_level });
+          gitlab.groupMembers.create({ id: gitlabGroup.id, user_id: id, access_level: access_level });
+        }
       }
     }
 
@@ -172,9 +176,9 @@ GitlabLdapGroupSync.prototype.accessLevel = function (id, memberGroups, groupNam
     } else if (roles.gitlab_guest.includes(groupName)) {
       return this.config['guestAccessLevel'] || ACCESS_LEVEL_GUEST;
     }
-  }
-
     return this.config['defaultAccessLevel'] || ACCESS_LEVEL_NORMAL;
+  }
+  return undefined;
 }
 
 GitlabLdapGroupSync.prototype.startScheduler = function (interval) {
