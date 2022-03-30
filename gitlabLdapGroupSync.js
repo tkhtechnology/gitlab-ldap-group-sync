@@ -6,6 +6,8 @@ var NodeGitlab = require('node-gitlab');
 var ACCESS_LEVEL_OWNER = 50;
 var ACCESS_LEVEL_MAINTAINER = 40;
 var ACCESS_LEVEL_NORMAL = 30;
+var ACCESS_LEVEL_REPORTER = 20;
+var ACCESS_LEVEL_GUEST = 10;
 
 module.exports = GitlabLdapGroupSync;
 
@@ -165,6 +167,10 @@ GitlabLdapGroupSync.prototype.accessLevel = function (id, memberGroups, groupNam
       return this.config['ownerAccessLevel'] || ACCESS_LEVEL_OWNER;
     } else if (roles.gitlab_maintainer.includes(groupName)) {
       return this.config['maintainerAccessLevel'] || ACCESS_LEVEL_MAINTAINER;
+    } else if (roles.gitlab_reporter.includes(groupName)) {
+      return this.config['reporterAccessLevel'] || ACCESS_LEVEL_REPORTER;
+    } else if (roles.gitlab_guest.includes(groupName)) {
+      return this.config['guestAccessLevel'] || ACCESS_LEVEL_GUEST;
     }
   }
 
@@ -225,7 +231,9 @@ GitlabLdapGroupSync.prototype.resolveLdapGroupMembersPermissions = function(ldap
           if (gitlabUserMap[user.userPrincipalName.toLowerCase()]) {
             let roles = {
               gitlab_owner: [],
-              gitlab_maintainer: []
+              gitlab_maintainer: [],
+              gitlab_reporter: [],
+              gitlab_guest: []
             };
 
             try {
