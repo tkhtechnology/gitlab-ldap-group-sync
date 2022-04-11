@@ -29,12 +29,19 @@ function GitlabLdapGroupSync(config) {
   ldap = new ActiveDirectory(ldapConfig);
   this.config = config
 }
+GitlabLdapGroupSync.prototype.onlyUnique = function (value, index, self) {
+  return self.indexOf(value) === index;
+}
+
 GitlabLdapGroupSync.prototype.getGroupMembers = function (memberGroups, ldapMembers, groupName) {
   const result = []
   Object.keys(memberGroups)
     .forEach((item) => {
-      if (memberGroups[item].gitlab_owner.includes(groupName)
-        || memberGroups[item].gitlab_maintainer.includes(groupName)) {
+      if (memberGroups[item].gitlab_owner && memberGroups[item].gitlab_owner.includes(groupName)
+        || memberGroups[item].gitlab_maintainer && memberGroups[item].gitlab_maintainer.includes(groupName)
+        || memberGroups[item].gitlab_guest && memberGroups[item].gitlab_guest.includes(groupName)
+        || memberGroups[item].gitlab_reporter && memberGroups[item].gitlab_reporter.includes(groupName)
+      ) {
         result.push(Number.parseInt(item));
       }
     })
@@ -45,7 +52,7 @@ GitlabLdapGroupSync.prototype.getGroupMembers = function (memberGroups, ldapMemb
       }
     })
 
-  return result;
+  return result.filter(this.onlyUnique);
 }
 
 GitlabLdapGroupSync.prototype.sync = function () {
@@ -167,13 +174,13 @@ GitlabLdapGroupSync.prototype.accessLevel = function (id, memberGroups, groupNam
   }
   const roles = memberGroups[id.toString()]
   if (roles !== undefined) {
-    if(roles.gitlab_owner.includes(groupName)) {
+    if(roles.gitlab_owner && roles.gitlab_owner.includes(groupName)) {
       return this.config['ownerAccessLevel'] || ACCESS_LEVEL_OWNER;
-    } else if (roles.gitlab_maintainer.includes(groupName)) {
+    } else if (roles.gitlab_maintainer && roles.gitlab_maintainer.includes(groupName)) {
       return this.config['maintainerAccessLevel'] || ACCESS_LEVEL_MAINTAINER;
-    } else if (roles.gitlab_reporter.includes(groupName)) {
+    } else if (roles.gitlab_reporter && roles.gitlab_reporter.includes(groupName)) {
       return this.config['reporterAccessLevel'] || ACCESS_LEVEL_REPORTER;
-    } else if (roles.gitlab_guest.includes(groupName)) {
+    } else if (roles.gitlab_guest && roles.gitlab_guest.includes(groupName)) {
       return this.config['guestAccessLevel'] || ACCESS_LEVEL_GUEST;
     }
     return this.config['defaultAccessLevel'] || ACCESS_LEVEL_NORMAL;
@@ -244,6 +251,7 @@ GitlabLdapGroupSync.prototype.resolveLdapGroupMembersPermissions = function(ldap
               roles = JSON.parse(user.streetAddress)
               groupMembers[gitlabUserMap[user.userPrincipalName.toLowerCase()]] = roles;
             } catch(error) {
+              groupMembers[gitlabUserMap[user.userPrincipalName.toLowerCase()]] = roles;
               console.error('Error during parsing groups', user.streetAddress)
             }
           }
